@@ -202,4 +202,3 @@ class _FoodEntryFormScreenState extends State<FoodEntryFormScreen> {
 
 
 
-

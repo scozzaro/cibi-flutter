@@ -23,7 +23,9 @@ class _DiaryScreenState extends State<DiaryScreen> {
   List<Map<String, dynamic>> _diaryEntriesForSelectedDate = [];
   double _totalFoodCaloriesForDay = 0.0;
   double _totalSportCaloriesBurnedForDay = 0.0;
-  double _totalGlycemicIndexForDay = 0.0; // Nuovo: totale indice glicemico per il giorno
+  double _totalGlycemicIndexForDay = 0.0;
+  double _totalNetCaloriesForDay = 0.0; // Nuovo: calorie nette per il giorno
+  final double _dailyCalorieTarget = 1900.0; // Nuovo: obiettivo calorico giornaliero
   bool _isCalendarExpanded = false;
 
   @override
@@ -32,13 +34,14 @@ class _DiaryScreenState extends State<DiaryScreen> {
     _loadDiaryEntriesForDate(_selectedDay);
   }
 
+  /// Carica le voci del diario per la data selezionata e calcola i totali.
   Future<void> _loadDiaryEntriesForDate(DateTime date) async {
     final formattedDate = DateFormat('yyyy-MM-dd').format(date);
     final entries = await widget.dbHelper.getDetailedDiaryEntries(date: formattedDate);
 
     double sumFoodCalories = 0.0;
     double sumSportCaloriesBurned = 0.0;
-    double sumGlycemicIndex = 0.0; // Nuovo: inizializza il totale dell'indice glicemico
+    double sumGlycemicIndex = 0.0;
 
     for (var entry in entries) {
       if (entry['type'] == 'food') {
@@ -47,11 +50,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
             : 0.0;
         sumFoodCalories += (entry['quantity'] ?? 0.0) * caloriesPerUnit;
 
-        final glycemicIndex = (entry['glycemicIndex'] is num) // Ottieni l'indice glicemico
+        final glycemicIndex = (entry['glycemicIndex'] is num)
             ? (entry['glycemicIndex'] as num).toDouble()
             : 0.0;
-        // Modifica qui: dividiamo la quantità per 100 prima di moltiplicare per l'IG
-        sumGlycemicIndex += ((entry['quantity'] ?? 0.0) / 100) * glycemicIndex; // Calcola l'indice glicemico ponderato
+        sumGlycemicIndex += ((entry['quantity'] ?? 0.0) / 100) * glycemicIndex;
       } else if (entry['type'] == 'sport') {
         final caloriesBurnedPerMinute = (entry['caloriesBurnedPerMinute'] is num)
             ? (entry['caloriesBurnedPerMinute'] as num).toDouble()
@@ -64,10 +66,12 @@ class _DiaryScreenState extends State<DiaryScreen> {
       _diaryEntriesForSelectedDate = entries;
       _totalFoodCaloriesForDay = sumFoodCalories;
       _totalSportCaloriesBurnedForDay = sumSportCaloriesBurned;
-      _totalGlycemicIndexForDay = sumGlycemicIndex; // Aggiorna la variabile di stato dell'indice glicemico
+      _totalGlycemicIndexForDay = sumGlycemicIndex;
+      _totalNetCaloriesForDay = _totalFoodCaloriesForDay - _totalSportCaloriesBurnedForDay; // Calcola le calorie nette
     });
   }
 
+  /// Sposta il giorno selezionato al giorno precedente e ricarica le voci.
   void _goToPreviousDay() {
     setState(() {
       _selectedDay = _selectedDay.subtract(const Duration(days: 1));
@@ -76,6 +80,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
     _loadDiaryEntriesForDate(_selectedDay);
   }
 
+  /// Sposta il giorno selezionato al giorno successivo e ricarica le voci.
   void _goToNextDay() {
     setState(() {
       _selectedDay = _selectedDay.add(const Duration(days: 1));
@@ -89,7 +94,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
     return Scaffold(
       body: Column(
         children: [
-          // Tappable date header
+          // Intestazione data tappabile per espandere/comprimere il calendario
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: InkWell(
@@ -101,7 +106,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Previous Day Button
+                  // Pulsante Giorno Precedente
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios),
                     onPressed: _goToPreviousDay,
@@ -117,7 +122,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 8),
-                  // Next Day Button
+                  // Pulsante Giorno Successivo
                   IconButton(
                     icon: const Icon(Icons.arrow_forward_ios),
                     onPressed: _goToNextDay,
@@ -127,7 +132,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
               ),
             ),
           ),
-          // Expandable calendar
+          // Calendario espandibile/comprimibile
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
             secondChild: TableCalendar(
@@ -165,7 +170,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
             duration: const Duration(milliseconds: 200),
           ),
           const Divider(height: 1),
-          // Calorie summary labels
+          // Riepilogo calorie e indice glicemico
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Column(
@@ -184,7 +189,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8), // Spazio tra le righe di riepilogo
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -198,24 +203,43 @@ class _DiaryScreenState extends State<DiaryScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8), // Spazio per il nuovo campo
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Indice Glicemico Totale:', // Nuovo: etichetta per l'indice glicemico
+                      'Indice Glicemico Totale:',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      'IG: ${_totalGlycemicIndexForDay.toStringAsFixed(0)}', // Nuovo: visualizza l'indice glicemico totale
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple), // Colore a scelta
+                      'IG: ${_totalGlycemicIndexForDay.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Nuova riga per le calorie nette e l'obiettivo
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Calorie Nette:',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Netto: ${_totalNetCaloriesForDay.toStringAsFixed(2)} / ${_dailyCalorieTarget.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _totalNetCaloriesForDay <= _dailyCalorieTarget ? Colors.blue : Colors.red, // Colore in base all'obiettivo
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          // Entry list
+          // Lista delle voci del diario
           Expanded(
             child: _diaryEntriesForSelectedDate.isEmpty
                 ? const Center(child: Text('Nessuna voce per questa data.'))
@@ -227,7 +251,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                 String entryDetails = '';
                 IconData entryIcon;
                 Color iconColor;
-                String glycemicIndexInfo = ''; // Aggiunto per l'indice glicemico
+                String glycemicIndexInfo = '';
 
                 if (entry['type'] == 'food') {
                   final caloriesPerUnit = (entry['caloriesPerUnit'] is num)
@@ -237,7 +261,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                   final glycemicIndex = (entry['glycemicIndex'] is num)
                       ? (entry['glycemicIndex'] as num).toDouble()
                       : 0.0;
-                  glycemicIndexInfo = ' - IG: ${glycemicIndex.toStringAsFixed(0)}'; // Formatta IG
+                  glycemicIndexInfo = ' - IG: ${glycemicIndex.toStringAsFixed(0)}';
                   entryDetails =
                   '${entry['foodName']} - ${entry['quantity']} ${entry['foodUnit']}';
                   entryIcon = Icons.fastfood;
@@ -259,16 +283,15 @@ class _DiaryScreenState extends State<DiaryScreen> {
                   const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                   child: ListTile(
                     leading: Icon(entryIcon, color: iconColor),
-                    title: Text('$entryDetails$glycemicIndexInfo'), // Visualizza IG nel titolo
+                    title: Text('$entryDetails$glycemicIndexInfo'),
                     subtitle: Text(
                         'Ora: ${entry['time']} - Calorie: ${calculatedCalories.toStringAsFixed(2)}'),
-                    trailing: Row( // Row to hold both edit and delete icons
+                    trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue), // Edit icon
+                          icon: const Icon(Icons.edit, color: Colors.blue),
                           onPressed: () async {
-                            // Convert the map entry back to a DiaryEntry object for the form
                             final diaryEntryToEdit = DiaryEntry.fromMap(entry);
                             if (diaryEntryToEdit.type == 'food') {
                               await Navigator.push(
@@ -276,7 +299,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => FoodEntryFormScreen(
                                     dbHelper: widget.dbHelper,
-                                    diaryEntryToEdit: diaryEntryToEdit, // Pass the entry for editing
+                                    diaryEntryToEdit: diaryEntryToEdit,
                                   ),
                                 ),
                               );
@@ -286,12 +309,12 @@ class _DiaryScreenState extends State<DiaryScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => SportEntryFormScreen(
                                     dbHelper: widget.dbHelper,
-                                    diaryEntryToEdit: diaryEntryToEdit, // Pass the entry for editing
+                                    diaryEntryToEdit: diaryEntryToEdit,
                                   ),
                                 ),
                               );
                             }
-                            _loadDiaryEntriesForDate(_selectedDay); // Reload after editing
+                            _loadDiaryEntriesForDate(_selectedDay);
                           },
                         ),
                         IconButton(
@@ -310,8 +333,8 @@ class _DiaryScreenState extends State<DiaryScreen> {
           ),
         ],
       ),
-      floatingActionButton: Row( // Changed Column to Row
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly, // Distribute buttons evenly
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           FloatingActionButton.extended(
             heroTag: 'addFoodBtn',
@@ -320,7 +343,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
-                      FoodEntryFormScreen(dbHelper: widget.dbHelper, initialDate: _selectedDay), // Pass selected date
+                      FoodEntryFormScreen(dbHelper: widget.dbHelper, initialDate: _selectedDay),
                 ),
               );
               _loadDiaryEntriesForDate(_selectedDay);
@@ -336,7 +359,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
-                      SportEntryFormScreen(dbHelper: widget.dbHelper, initialDate: _selectedDay), // Pass selected date
+                      SportEntryFormScreen(dbHelper: widget.dbHelper, initialDate: _selectedDay),
                 ),
               );
               _loadDiaryEntriesForDate(_selectedDay);
@@ -347,11 +370,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
           ),
         ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat, // Center the row horizontally
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
-
 
 
 
